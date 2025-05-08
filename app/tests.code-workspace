@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": "../tests"
+		},
+		{
+			"path": "../__pycache__"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../credentials"
+		},
+		{
+			"path": "../extension"
+		},
+		{
+			"path": "../static"
+		}
+	]
+}

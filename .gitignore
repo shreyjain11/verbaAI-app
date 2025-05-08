@@ -1,0 +1,21 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Streamlit temp audio
+static/temp_audio.wav
+
+# OAuth credentials (never commit secrets!)
+credentials/gmail_credentials.json
+
+# VSCode settings and caches
+.vscode/
+
+# Anything else you don’t need under version control
+*.log
+.pytest_cache/

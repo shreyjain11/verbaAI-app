@@ -1,154 +1,140 @@
 # app/main.py
-
 import os
 import streamlit as st
-import requests
 from dotenv import load_dotenv
-from streamlit_lottie import st_lottie
+from openai import OpenAI
 from app.transcribe import transcribe_audio
 from app.summarize import summarize_to_email
 from app.email_utils import gmail_login, create_message, send_email
 
+# Load environment variables (your OPENAI_API_KEY, etc.)
 load_dotenv()
 
-# ——— Constants ———
+# Initialize OpenAI client once
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Pre-saved contacts (you can pull these from a DB or file later)
 CONTACTS = {
-    "Boss":     "boss@example.com",
-    "Client":   "client@example.com",
+    "Boss": "boss@example.com",
+    "Client": "client@example.com",
     "Coworker": "coworker@example.com",
-    "Myself":   "mailshreyjain@gmail.com"
+    "Myself": st.session_state.get("user_profile", {}).get("email", "")
 }
-AUDIO_PATH = "static/temp_audio.wav"
 
-# ——— Helpers ———
-def load_css(path: str):
-    """Inject local CSS file into the app."""
-    if os.path.exists(path):
-        with open(path) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-@st.cache_data
-def load_lottie_url(url: str):
-    """Fetch a Lottie JSON from a URL (cached)."""
-    r = requests.get(url)
-    return r.json() if r.status_code == 200 else None
-
-def save_uploaded_audio(uploaded, path: str):
-    """Write uploaded audio file to disk."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "wb") as f:
-        f.write(uploaded.read())
-
-# Resolve project root and logo path
-HERE = os.path.dirname(__file__)                   # e.g. /Users/.../verbaAI/app
-PROJECT_ROOT = os.path.abspath(os.path.join(HERE, os.pardir))
-LOGO_PATH = os.path.join(PROJECT_ROOT, "logo.png")
-
-logo_col, anim_col = st.columns([1, 2])
-with logo_col:
-    if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, width=100)
-    else:
-        st.warning(f"⚠️ logo.png not found at:\n{LOGO_PATH}")
-        
-with anim_col:
-    lottie = load_lottie_url(
-        "https://assets9.lottiefiles.com/packages/lf20_ucbyrun5.json"
-    )
-    if lottie:
-        st_lottie(lottie, height=120)
-
-# Load your app/style.css (make sure this file lives at app/style.css)
-load_css("app/style.css")
-
-# Branded header
-st.markdown(
-    "<h1 style='text-align:center; color:#333;'>VerbaAI</h1>"
-    "<p style='text-align:center; font-size:1.1em;'>"
-    "Your AI-powered voice-to-email assistant"
-    "</p>",
-    unsafe_allow_html=True
-)
-
-# ——— User Profile Setup ———
 def setup_user_profile():
-    st.header("🛠️ Set Up Your Profile")
+    """Show profile-setup form, save into session_state, then return."""
+    st.image("logo.png", width=120)
+    st.title("🛠 Set Up Your VerbaAI Profile")
+
     name          = st.text_input("Your Full Name")
-    title         = st.text_input("Your Title/Position (optional)")
+    title         = st.text_input("Your Title or Position (optional)")
     contact_email = st.text_input("Your Contact Email")
-    phone_number  = st.text_input("Your Phone Number (optional)")
+    phone         = st.text_input("Your Phone Number (optional)")
 
     if st.button("Save Profile and Continue ➡️"):
-        if name.strip() and contact_email.strip():
-            st.session_state.user_profile = {
-                "name":  name.strip(),
-                "title": title.strip(),
-                "email": contact_email.strip(),
-                "phone": phone_number.strip()
-            }
-            st.success("✅ Profile saved!")
-            st.experimental_rerun()
-        else:
-            st.error("⚠️ Name and Email are required.")
+        if not name or not contact_email:
+            st.error("Please enter at least your name and email.")
+            return
 
-# ——— Main App Flow ———
+        st.session_state.user_profile = {
+            "name":  name,
+            "title": title,
+            "email": contact_email,
+            "phone": phone
+        }
+        st.success("✅ Profile saved!")
+        return  # Streamlit will auto-rerun and drop into main_app()
+
 def main_app():
-    prof = st.session_state.user_profile
-    st.header(f"🎯 Hello, {prof['name']}!")
-    st.subheader("Step 1: Upload your audio file")
+    """Main voice-to-email flow once profile is set."""
+    user = st.session_state.user_profile
+    st.title(f"🎯 Hello, {user['name']}!")
+    st.write("## Step 1: Provide your audio")
 
-    uploaded = st.file_uploader("Upload a .wav or .mp3", type=["wav", "mp3"])
-    if uploaded:
-        save_uploaded_audio(uploaded, AUDIO_PATH)
-        st.success("✅ Audio uploaded, processing…")
+    mode = st.radio("Select how you'd like to provide audio:", ["Upload a File", "Record Now"])
+    audio_path = None
+
+    if mode == "Upload a File":
+        upload = st.file_uploader("Choose a .wav or .mp3", type=["wav", "mp3"])
+        if upload:
+            audio_path = "static/temp_audio.wav"
+            with open(audio_path, "wb") as f:
+                f.write(upload.read())
+
+    else:  # Record Now
+        st.info("Click ▶️ Start Recording to begin, ◼️ Stop when done.")
+        from streamlit_webrtc import webrtc_streamer  # pip install streamlit-webrtc
+        ctx = webrtc_streamer(key="voice-recorder", audio_receiver_size=1024)
+        if ctx and ctx.audio_receiver:
+            # When user stops, grab frames and save
+            frames = ctx.audio_receiver.get_frames(timeout=5)
+            if frames:
+                import soundfile as sf  # pip install soundfile
+                data = b"".join([f.to_bytes() for f in frames])
+                audio_path = "static/temp_audio.wav"
+                with open(audio_path, "wb") as f:
+                    f.write(data)
+            else:
+                st.warning("⚠️ No audio captured—try again.")
+        else:
+            st.write("🔴 Not recording")
+
+    # If we have a file, transcribe & summarize
+    if audio_path:
+        st.info("🔊 Transcribing audio...")
         try:
-            transcript = transcribe_audio(AUDIO_PATH)
-            st.session_state.transcript = transcript
+            transcript = transcribe_audio(audio_path)
+            st.subheader("📝 Transcript")
+            st.text_area("Full transcribed text", transcript, height=200)
 
+            st.info("✍️ Generating email draft...")
             draft = summarize_to_email(transcript)
-            sig  = f"\n\nBest regards,\n{prof['name']}"
-            if prof.get("title"): sig += f"\n{prof['title']}"
-            sig += f"\n{prof['email']}"
-            if prof.get("phone"): sig += f"\n{prof['phone']}"
-
+            # append signature
+            sig = f"\n\nBest regards,\n{user['name']}"
+            if user.get("title"):
+                sig += f"\n{user['title']}"
+            sig += f"\n{user['email']}"
+            if user.get("phone"):
+                sig += f"\n{user['phone']}"
             st.session_state.email_draft = draft + sig
-            st.success("✅ Transcript and draft ready!")
+
         except Exception as e:
-            st.error(f"Error during processing: {e}")
+            st.error(f"Error: {e}")
 
-    if "transcript" in st.session_state:
-        st.subheader("📜 Transcript")
-        st.text_area("", st.session_state.transcript, height=200)
+    # Show & edit draft
+    if "email_draft" in st.session_state:
+        st.subheader("✏️ Email Draft")
+        st.session_state.email_draft = st.text_area(
+            "Edit your email", st.session_state.email_draft, height=250
+        )
 
-        st.subheader("✍️ Email Draft")
-        st.session_state.email_draft = st.text_area("", st.session_state.email_draft, height=250)
+        st.subheader("📬 Recipients")
+        choices = st.multiselect("Select saved contacts:", list(CONTACTS.keys()))
+        manual = st.text_input("Or enter a custom email")
 
-        st.subheader("👥 Recipients")
-        chosen = st.multiselect("Pick saved contacts:", list(CONTACTS.keys()))
-        custom = st.text_input("Or enter a custom email:")
-
-        recips = [CONTACTS[n] for n in chosen]
-        if custom.strip(): recips.append(custom.strip())
+        recipients = [CONTACTS[name] for name in choices]
+        if manual:
+            recipients.append(manual.strip())
 
         subject = st.text_input("Subject Line")
 
-        if st.button("📨 Send Email"):
-            if recips and subject.strip() and st.session_state.email_draft.strip():
-                try:
-                    svc = gmail_login()
-                    msg = create_message(recips, subject.strip(), st.session_state.email_draft)
-                    send_email(svc, msg)
-                    st.success("✅ Email sent!")
-                except Exception as e:
-                    st.error(f"Failed to send: {e}")
+        if st.button("Send Email"):
+            if not (recipients and subject and st.session_state.email_draft):
+                st.error("Please fill out all fields before sending.")
             else:
-                st.error("⚠️ Fill out all fields before sending.")
+                try:
+                    service = gmail_login()
+                    msg = create_message(recipients, subject, st.session_state.email_draft)
+                    send_email(service, msg)
+                    st.success("✅ Email sent!")
+                except Exception as err:
+                    st.error(f"Failed to send: {err}")
 
-        if st.button("🔄 Reset"):
-            st.session_state.clear()
-            st.experimental_rerun()
+        if st.button("🔄 Reset & Start Over"):
+            for key in ["transcript", "email_draft"]:
+                st.session_state.pop(key, None)
+            return  # rerun to go back to Step 1
 
-# ——— Entrypoint ———
 def main():
     if "user_profile" not in st.session_state:
         setup_user_profile()

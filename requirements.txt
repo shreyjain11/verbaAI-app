@@ -1,11 +1,8 @@
+# requirements.txt
 streamlit
-streamlit-lottie
-requests
 python-dotenv
 openai
-openai-whisper
 google-auth-oauthlib
 google-api-python-client
-ffmpeg-python
-numba<=0.58
-numpy<=1.25.2
+requests
+streamlit-lottie

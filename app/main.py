@@ -24,14 +24,14 @@ CONTACTS = {
 def setup_user_profile():
     """Show profile-setup form, save into session_state, then return."""
     st.image("logo.png", width=120)
-    st.title("🛠 Set Up Your VerbaAI Profile")
+    st.title("Set Up Your VerbaAI Profile")
 
     name          = st.text_input("Your Full Name")
     title         = st.text_input("Your Title or Position (optional)")
     contact_email = st.text_input("Your Contact Email")
     phone         = st.text_input("Your Phone Number (optional)")
 
-    if st.button("Save Profile and Continue ➡️"):
+    if st.button("Save Profile and Continue"):
         if not name or not contact_email:
             st.error("Please enter at least your name and email.")
             return

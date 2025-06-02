@@ -42,13 +42,13 @@ def setup_user_profile():
             "email": contact_email,
             "phone": phone
         }
-        st.success("✅ Profile saved!")
+        st.success("Profile saved!")
         return  # Streamlit will auto-rerun and drop into main_app()
 
 def main_app():
     """Main voice-to-email flow once profile is set."""
     user = st.session_state.user_profile
-    st.title(f"🎯 Hello, {user['name']}!")
+    st.title(f"Hello, {user['name']}!")
     st.write("## Step 1: Provide your audio")
 
     mode = st.radio("Select how you'd like to provide audio:", ["Upload a File", "Record Now"])
@@ -75,19 +75,19 @@ def main_app():
                 with open(audio_path, "wb") as f:
                     f.write(data)
             else:
-                st.warning("⚠️ No audio captured—try again.")
+                st.warning("⚠No audio captured—try again.")
         else:
-            st.write("🔴 Not recording")
+            st.write("Not recording")
 
     # If we have a file, transcribe & summarize
     if audio_path:
         st.info("🔊 Transcribing audio...")
         try:
             transcript = transcribe_audio(audio_path)
-            st.subheader("📝 Transcript")
+            st.subheader("Transcript")
             st.text_area("Full transcribed text", transcript, height=200)
 
-            st.info("✍️ Generating email draft...")
+            st.info("Generating email draft...")
             draft = summarize_to_email(transcript)
             # append signature
             sig = f"\n\nBest regards,\n{user['name']}"
@@ -103,12 +103,12 @@ def main_app():
 
     # Show & edit draft
     if "email_draft" in st.session_state:
-        st.subheader("✏️ Email Draft")
+        st.subheader("Email Draft")
         st.session_state.email_draft = st.text_area(
             "Edit your email", st.session_state.email_draft, height=250
         )
 
-        st.subheader("📬 Recipients")
+        st.subheader("Recipients")
         choices = st.multiselect("Select saved contacts:", list(CONTACTS.keys()))
         manual = st.text_input("Or enter a custom email")
 
@@ -126,11 +126,11 @@ def main_app():
                     service = gmail_login()
                     msg = create_message(recipients, subject, st.session_state.email_draft)
                     send_email(service, msg)
-                    st.success("✅ Email sent!")
+                    st.success("Email sent!")
                 except Exception as err:
                     st.error(f"Failed to send: {err}")
 
-        if st.button("🔄 Reset & Start Over"):
+        if st.button("Reset & Start Over"):
             for key in ["transcript", "email_draft"]:
                 st.session_state.pop(key, None)
             return  # rerun to go back to Step 1
